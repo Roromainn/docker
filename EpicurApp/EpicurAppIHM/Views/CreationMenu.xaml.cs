@@ -198,11 +198,48 @@ namespace EpicurAppIHM.Views
                 {
                     if (creation)
                     {
-                        Menu? menuCree = response.Content.ReadFromJsonAsync<Menu>().Result;
+                        Menu? menuCree = null;
+                        try
+                        {
+                            menuCree = response.Content.ReadFromJsonAsync<Menu>().Result;
+                        }
+                        catch
+                        {
+                            menuCree = null;
+                        }
+
                         if (menuCree != null)
                         {
                             _menuBrouillonId = menuCree.Id;
                         }
+                        else
+                        {
+                            // Tentative de récupération par l'API en dernier recours
+                            try
+                            {
+                                HttpResponseMessage brouillonResponse = _httpClient.GetAsync("Menu/Brouillon").Result;
+                                if (brouillonResponse.IsSuccessStatusCode)
+                                {
+                                    Menu? brouillon = brouillonResponse.Content.ReadFromJsonAsync<Menu>().Result;
+                                    if (brouillon != null)
+                                    {
+                                        _menuBrouillonId = brouillon.Id;
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                // ignoré volontairement, _menuBrouillonId restera null
+                            }
+                        }
+                    }
+
+                    if (_menuBrouillonId == null)
+                    {
+                        MessageBox.Show("Brouillon enregistré mais impossible de récupérer son identifiant.",
+                                        "Avertissement",
+                                        MessageBoxButton.OK,
+                                        MessageBoxImage.Warning);
                     }
 
                     if (statut.Equals("Validé", StringComparison.OrdinalIgnoreCase))
@@ -215,6 +252,9 @@ namespace EpicurAppIHM.Views
                     {
                         MessageBox.Show("Brouillon enregistré avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
+
+                    // Recharge depuis l'API pour être certain de la cohérence
+                    ChargerBrouillon();
                 }
                 else
                 {

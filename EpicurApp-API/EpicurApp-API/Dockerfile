@@ -47,8 +47,10 @@ RUN dotnet publish "EpicurApp-API.csproj" -c $BUILD_CONFIGURATION -o /app/publis
 FROM base AS final
 WORKDIR /app
 ENV ASPNETCORE_Kestrel__Certificates__Default__Path="/https/thecertif.pfx"
-COPY --from=publish --chmod=555 /root/.dotnet/corefx/cryptography/x509stores/my/* /https/thecertif.pfx
-COPY --from=publish /app/publish .
+COPY --from=publish --chmod=555 --chown=app:app /root/.dotnet/corefx/cryptography/x509stores/my/* /https/thecertif.pfx
+COPY --from=publish --chown=app:app /app/publish .
+
+RUN chmod 664 /app/epicurapp.db || true
 
 RUN mkdir -p /app/data && chmod 777 /app/data
 

@@ -1,5 +1,6 @@
 ﻿using EpicurApp_API.Models;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System;
 using EpicurAPP_Partage.Interfaces;
@@ -9,12 +10,24 @@ namespace EpicurApp_API.DAO
 {
     public class PlatDAO : IPlatDAO
     {
-        private string _connexionString;
+        private readonly string _connexionString;
+        private readonly ILogger<PlatDAO> _logger;
 
-        public PlatDAO(IConfiguration configuration)
+        public PlatDAO(IConfiguration configuration, ILogger<PlatDAO> logger)
         {
-            _connexionString = configuration.GetConnectionString("DefaultConnection") 
-                ?? "Data Source=epicurapp.db";
+            _connexionString = configuration.GetConnectionString("DefaultConnection");
+            if (string.IsNullOrWhiteSpace(_connexionString))
+            {
+                _logger = logger;
+                _logger.LogWarning("Chaîne de connexion vide, utilisation du chemin par défaut /app/epicurapp.db");
+                _connexionString = "Data Source=/app/epicurapp.db";
+            }
+            else
+            {
+                _logger = logger;
+            }
+
+            _logger.LogInformation("Chaîne de connexion Plats : {ConnectionString}", _connexionString);
         }
 
         public List<Plat> GetAll()
@@ -22,23 +35,33 @@ namespace EpicurApp_API.DAO
             List<Plat> plats = new List<Plat>();
             const string query = "SELECT Id, Nom, Categorie, IngredientsPrincipaux FROM Plats ORDER BY Categorie, Nom;";
 
-            using (SqliteConnection connexion = new SqliteConnection(_connexionString))
+            try
             {
-                connexion.Open();
-                using (SqliteCommand cmd = new SqliteCommand(query, connexion))
-                using (SqliteDataReader reader = cmd.ExecuteReader())
+                using (SqliteConnection connexion = new SqliteConnection(_connexionString))
                 {
-                    while (reader.Read())
+                    connexion.Open();
+                    _logger.LogInformation("Connexion ouverte vers {DbPath}", connexion.DataSource);
+
+                    using (SqliteCommand cmd = new SqliteCommand(query, connexion))
+                    using (SqliteDataReader reader = cmd.ExecuteReader())
                     {
-                        plats.Add(new Plat
+                        while (reader.Read())
                         {
-                            Id = reader.GetInt32(0),
-                            Nom = reader.GetString(1),
-                            Categorie = reader.GetString(2),
-                            IngredientsPrincipaux = reader.IsDBNull(3) ? string.Empty : reader.GetString(3) 
-                        });
+                            plats.Add(new Plat
+                            {
+                                Id = reader.GetInt32(0),
+                                Nom = reader.GetString(1),
+                                Categorie = reader.GetString(2),
+                                IngredientsPrincipaux = reader.IsDBNull(3) ? string.Empty : reader.GetString(3)
+                            });
+                        }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la lecture des plats depuis {ConnectionString}", _connexionString);
+                throw;
             }
 
             return plats;
@@ -49,27 +72,37 @@ namespace EpicurApp_API.DAO
             Plat? plat = null;
             const string query = "SELECT Id, Nom, Categorie, IngredientsPrincipaux FROM Plats WHERE Id = @Id;";
 
-            using (SqliteConnection connection = new SqliteConnection(_connexionString))
+            try
             {
-                connection.Open();
-                using (SqliteCommand command = new SqliteCommand(query, connection))
+                using (SqliteConnection connection = new SqliteConnection(_connexionString))
                 {
-                    command.Parameters.AddWithValue("@Id", id);
+                    connection.Open();
+                    _logger.LogInformation("Recherche du plat {Id} dans {DbPath}", id, connection.DataSource);
 
-                    using (SqliteDataReader reader = command.ExecuteReader())
+                    using (SqliteCommand command = new SqliteCommand(query, connection))
                     {
-                        if (reader.Read())
+                        command.Parameters.AddWithValue("@Id", id);
+
+                        using (SqliteDataReader reader = command.ExecuteReader())
                         {
-                            plat = new Plat
+                            if (reader.Read())
                             {
-                                Id = reader.GetInt32(0),
-                                Nom = reader.GetString(1),
-                                Categorie = reader.GetString(2),
-                                IngredientsPrincipaux = reader.IsDBNull(3) ? string.Empty : reader.GetString(3) 
-                            };
+                                plat = new Plat
+                                {
+                                    Id = reader.GetInt32(0),
+                                    Nom = reader.GetString(1),
+                                    Categorie = reader.GetString(2),
+                                    IngredientsPrincipaux = reader.IsDBNull(3) ? string.Empty : reader.GetString(3)
+                                };
+                            }
                         }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la récupération du plat {Id} depuis {ConnectionString}", id, _connexionString);
+                throw;
             }
 
             return plat;
@@ -80,21 +113,28 @@ namespace EpicurApp_API.DAO
            
             const string query = "INSERT INTO Plats (Nom, Categorie, IngredientsPrincipaux) VALUES (@Nom, @Categorie, @IngredientsPrincipaux);";
 
-            using (SqliteConnection connection = new SqliteConnection(_connexionString))
+            try
             {
-                connection.Open();
-                using (SqliteCommand command = new SqliteCommand(query, connection))
+                using (SqliteConnection connection = new SqliteConnection(_connexionString))
                 {
-                    command.Parameters.AddWithValue("@Nom", plat.Nom);
-                    command.Parameters.AddWithValue("@Categorie", plat.Categorie);
-                    command.Parameters.AddWithValue("@IngredientsPrincipaux", plat.IngredientsPrincipaux ?? string.Empty); 
+                    connection.Open();
+                    using (SqliteCommand command = new SqliteCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@Nom", plat.Nom);
+                        command.Parameters.AddWithValue("@Categorie", plat.Categorie);
+                        command.Parameters.AddWithValue("@IngredientsPrincipaux", plat.IngredientsPrincipaux ?? string.Empty);
 
-                    command.ExecuteNonQuery();
+                        command.ExecuteNonQuery();
 
-
-                    command.CommandText = "SELECT last_insert_rowid();";
-                    plat.Id = Convert.ToInt32(command.ExecuteScalar());
+                        command.CommandText = "SELECT last_insert_rowid();";
+                        plat.Id = Convert.ToInt32(command.ExecuteScalar());
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de l'ajout du plat {Nom}", plat.Nom);
+                throw;
             }
         }
 
@@ -103,18 +143,26 @@ namespace EpicurApp_API.DAO
         {
             const string query = "UPDATE Plats SET Nom = @Nom, Categorie = @Categorie, IngredientsPrincipaux = @IngredientsPrincipaux WHERE Id = @Id;";
 
-            using (SqliteConnection connection = new SqliteConnection(_connexionString))
+            try
             {
-                connection.Open();
-                using (SqliteCommand command = new SqliteCommand(query, connection))
+                using (SqliteConnection connection = new SqliteConnection(_connexionString))
                 {
-                    command.Parameters.AddWithValue("@Id", plat.Id);
-                    command.Parameters.AddWithValue("@Nom", plat.Nom);
-                    command.Parameters.AddWithValue("@Categorie", plat.Categorie);
-                    command.Parameters.AddWithValue("@IngredientsPrincipaux", plat.IngredientsPrincipaux ?? string.Empty);
+                    connection.Open();
+                    using (SqliteCommand command = new SqliteCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@Id", plat.Id);
+                        command.Parameters.AddWithValue("@Nom", plat.Nom);
+                        command.Parameters.AddWithValue("@Categorie", plat.Categorie);
+                        command.Parameters.AddWithValue("@IngredientsPrincipaux", plat.IngredientsPrincipaux ?? string.Empty);
 
-                    command.ExecuteNonQuery();
+                        command.ExecuteNonQuery();
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la mise à jour du plat {Id}", plat.Id);
+                throw;
             }
         }
 
@@ -122,14 +170,22 @@ namespace EpicurApp_API.DAO
         {
             const string query = "DELETE FROM Plats WHERE Id = @Id;";
 
-            using (SqliteConnection connection = new SqliteConnection(_connexionString))
+            try
             {
-                connection.Open();
-                using (SqliteCommand command = new SqliteCommand(query, connection))
+                using (SqliteConnection connection = new SqliteConnection(_connexionString))
                 {
-                    command.Parameters.AddWithValue("@Id", id);
-                    command.ExecuteNonQuery();
+                    connection.Open();
+                    using (SqliteCommand command = new SqliteCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@Id", id);
+                        command.ExecuteNonQuery();
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la suppression du plat {Id}", id);
+                throw;
             }
         }
     }

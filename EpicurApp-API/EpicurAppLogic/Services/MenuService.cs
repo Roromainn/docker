@@ -1,6 +1,7 @@
 ﻿using EpicurAPP_Partage.Exceptions;
 using EpicurAPP_Partage.Interfaces;
 using EpicurApp_API.Models;
+using System;
 
 namespace EpicurApp.Logic.Services
 {
@@ -19,6 +20,8 @@ namespace EpicurApp.Logic.Services
             {
                 throw new InvalidFieldException("Le nom du menu est obligatoire.");
             }
+
+            ValiderStatut(menu.Statut);
 
             try
             {
@@ -54,6 +57,47 @@ namespace EpicurApp.Logic.Services
             }
         }
 
+        public Menu? GetDernierBrouillon()
+        {
+            try
+            {
+                return _menuRepository.GetDernierBrouillon();
+            }
+            catch (Exception ex)
+            {
+                throw new ApplicationException("Erreur lors de la récupération du brouillon de menu.", ex);
+            }
+        }
+
+        public void MettreAJourMenu(Menu menu)
+        {
+            if (menu == null)
+            {
+                throw new InvalidFieldException("Les informations du menu sont obligatoires.");
+            }
+
+            if (menu.Id <= 0)
+            {
+                throw new InvalidFieldException("L'identifiant du menu est obligatoire pour la mise à jour.");
+            }
+
+            if (string.IsNullOrWhiteSpace(menu.Nom))
+            {
+                throw new InvalidFieldException("Le nom du menu est obligatoire.");
+            }
+
+            ValiderStatut(menu.Statut);
+
+            try
+            {
+                _menuRepository.MettreAJourMenu(menu);
+            }
+            catch (Exception ex)
+            {
+                throw new ApplicationException("Erreur lors de la mise à jour du menu.", ex);
+            }
+        }
+
         public void AjouterPlatsAuMenu(int menuId, List<int> platIds)
         {
             if (platIds == null || platIds.Count == 0)
@@ -68,6 +112,20 @@ namespace EpicurApp.Logic.Services
             catch (Exception ex)
             {
                 throw new ApplicationException("Erreur lors de l'ajout des plats au menu.", ex);
+            }
+        }
+
+        private static void ValiderStatut(string statut)
+        {
+            if (string.IsNullOrWhiteSpace(statut))
+            {
+                throw new InvalidFieldException("Le statut du menu est obligatoire.");
+            }
+
+            if (!string.Equals(statut, "Brouillon", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(statut, "Validé", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidFieldException("Le statut du menu doit être 'Brouillon' ou 'Validé'.");
             }
         }
     }

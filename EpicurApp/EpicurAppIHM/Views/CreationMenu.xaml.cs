@@ -7,6 +7,7 @@ using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
 using EpicurAppIHM.Services;
+using Menu = EpicurApp_API.Models.Menu;
 
 namespace EpicurAppIHM.Views
 {
